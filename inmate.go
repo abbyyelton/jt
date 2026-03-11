@@ -1,10 +1,5 @@
 package main
 
-import (
-	"fmt"
-	"log"
-)
-
 type Case struct {
 	CaseNo     string  `json:"caseNo"`
 	Status     string  `json:"status"`
@@ -113,10 +108,15 @@ type Inmate struct {
 	SpecialArrestDate string `json:"specialArrestDate"`
 	// "Arresting Agency" (string "Circuit Court")
 	SpecialArrestingAgency string `json:"specialArrestingAgency"`
-	// "Arresting Officer" (string "SOME NAME")
+	// "Arresting Agency" (string "Circuit Court")
 	SpecialArrestingOfficer string `json:"specialArrestingOfficer"`
+	// "First Name" (string "SOME NAME")
+	SpecialFirstName string `json:"specialFirstName"`
+	// "Last Name" (string "SOME NAME")
+	SpecialLastName string `json:"specialLastName"`
 }
 
+/*
 func (i *Inmate) Update(j *Jail) error {
 	//"<OMS_URL>/jtclientweb/Offender/<JAIL_NAME>/<ARREST_NO>/offenderbucket/<OFFENDER_VIEW_KEY>",
 	inmateURL := fmt.Sprintf("%s/jtclientweb/Offender/%s/%s/offenderbucket/%d",
@@ -179,8 +179,13 @@ func (i *Inmate) Update(j *Jail) error {
 			i.SpecialArrestingAgency = specialField.Value
 		case "Arresting Officer:":
 			i.SpecialArrestingOfficer = specialField.Value
+		case "First Name:":
+			i.SpecialFirstName = specialField.Value
+		case "Last Name:":
+			i.SpecialLastName = specialField.Value
 		}
 	}
 
 	return nil
 }
+*/

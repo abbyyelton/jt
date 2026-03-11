@@ -4,8 +4,70 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strings"
 	"time"
 )
+
+/*
+type Offense struct {
+	Offense           string `json:"Offense"`
+	ArrestCode        string `json:"Arrest Code"`
+	Statute           string `json:"Statute"`
+	ChargeDescription string `json:"Charge Description"`
+	Status            string `json:"Status"`
+	CaseNumber        string `json:"Case Number"`
+	ControlNumber     string `json:"Control Number"`
+	CourtDate         string `json:"CourtDate"`
+	CourtType         string `json:"CourtType"`
+}*/
+
+type File struct {
+	FileName string `json:"filename"`
+	FileType string `json:"type"`
+	Data     string `json:"data"`
+}
+
+type Prisoner struct {
+	Id                        int    `json:"id"`
+	AgencyOffenderId          string `json:"agencyOffenderId"`
+	AgencyOffenderPermanentId string `json:"agencyOffenderPermanentId"`
+	FirstName                 string `json:"firstName"`
+	LastName                  string `json:"lastName"`
+	MiddleName                string `json:"middleName"`
+	NameSuffix                string `json:"nameSuffix"`
+	Gender                    string `json:"gender"`
+	SupervisionStatus         string `json:"supervisionStatus"`
+	ImageUri                  string `json:"imageUri"`
+	DetailsJson               string `json:"detailsJson"`
+	BookDate                  string `json:"bookDate"`
+	ReleaseDate               string `json:"releaseDate"`
+	CreatedDateTime           string `json:"createdDateTime"`
+	UpdatedDateTime           string `json:"updatedDateTime"`
+	MultiAgencyName           string `json:"multiAgencyName"`
+	HasImage                  bool   `json:"hasImage"`
+	BirthDate                 string `json:"birthDate"`
+	Ssn                       string `json:"ssn"`
+	DriversLicenseNumber      string `json:"driversLicenseNumber"`
+	StateId                   string `json:"stateId"`
+	BirthDateEncrypted        string `json:"birthDateEncrypted"`
+	SsnEncrypted              string `json:"ssnEncrypted"`
+}
+
+type FullJailResponse struct {
+	// Yes, "Requred", this is in their API. This key (like others) is typo'd.
+	// (Also typo'd in the inmate request, but NOT in <FACILITY>/NameSearch)
+	Success bool `json:"success"`
+	// They'll keep updating this
+	StatusCode int `json:"statusCode"`
+	// The initial list of inmate data
+	ValidationErrors []string `json:"validationErrors"`
+	// This is updated with every request
+	Prisoners []Prisoner `json:"data"`
+	// Empty string on success, non-empty on error.
+	// JailTracker sitll returns a 200 for what should be an internal server error or bad gateway,
+	// but this will at least be set.
+	ErrorMessage string `json:"errorMessage"`
+}
 
 type JailResponse struct {
 	// Yes, "Requred", this is in their API. This key (like others) is typo'd.
@@ -42,8 +104,37 @@ type Jail struct {
 	EndTimeUTC time.Time
 }
 
-func NewJail(baseURL, name string) (*Jail, error) {
-	j := &Jail{
+// Jail is a top-level struct for a task to retrieve the list of inmates in a jail.
+// This is also the type used to serialize to JSON for storage.
+type Jail2 struct {
+	// BaseURL for the jail. Usually "https://omsweb.public-safety-cloud.com", but not always!
+	BaseURL string
+	// Name of the jail, as it appears in the URL
+	Name string
+	// This is sent with each request, and sometimes updated
+	CaptchaKey string
+	//TODO rename "offenders" to something more appropriate; this is JailTracker terminology
+	Offenders []Prisoner
+	// Each request (after validation) updates this key!
+	OffenderViewKey int
+	// When the job started
+	StartTimeUTC time.Time
+	// When the job ended
+	EndTimeUTC time.Time
+}
+
+type Payload struct {
+	// This is set in the GET response, and should also be sent in the POST
+	recaptchaToken *string
+	// This doesn't need to be set in the POST
+	supervisionStatus string
+	// UserCode is null in the GET response, set for POST
+	multiAgencyName string
+	gender          string
+}
+
+func NewJail(baseURL, name string) (*Jail2, error) {
+	j := &Jail2{
 		BaseURL:      baseURL,
 		Name:         name,
 		StartTimeUTC: time.Now().UTC(),
@@ -54,30 +145,34 @@ func NewJail(baseURL, name string) (*Jail, error) {
 	log.Println("Captcha matched!")
 
 	// Make initial request for jail data
-	payload := &CaptchaProtocol{
-		CaptchaKey:   j.CaptchaKey,
-		CaptchaImage: "",
+	payload := &Payload{
+		recaptchaToken:    nil,
+		supervisionStatus: "Active",
 		// This is normally null in this request in the web client :\
-		UserCode: "",
+		multiAgencyName: "All",
+		gender:          "",
 	}
-	jailResponse := &JailResponse{}
-	err := PostJSON[CaptchaProtocol, JailResponse](j.getJailAPIURL(), nil, payload, jailResponse)
+	jailResponse := &FullJailResponse{}
+	url := fmt.Sprintf("%s/publicroster-api/api/%s/search-offenders", baseURL, name)
+	err := PostJSON[Payload, FullJailResponse](url, nil, payload, jailResponse)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to request initial jail data: %w", err)
 	}
 	if jailResponse.ErrorMessage != "" {
 		return nil, fmt.Errorf(`non-empty error message for jail "%s": "%s"`, name, jailResponse.ErrorMessage)
 	}
-	if jailResponse.CaptchaRequired {
-		return nil, fmt.Errorf("captcha required for jail. Response: %v", jailResponse)
+	var filtered []Prisoner
+	for _, o := range jailResponse.Prisoners {
+		if strings.Contains(strings.ToLower(o.DetailsJson), "federal") {
+			filtered = append(filtered, o)
+		}
 	}
-
-	j.OffenderViewKey = jailResponse.OffenderViewKey
-	j.Offenders = jailResponse.Offenders
+	j.Offenders = filtered
 	return j, nil
 }
 
-func (j *Jail) updateCaptcha() error {
+func (j *Jail2) updateCaptcha() error {
 	captchaMatched := false
 	var captchaKey string
 	var err error
@@ -109,13 +204,13 @@ func (j *Jail) UpdateInmates() error {
 		time.Sleep(duration)
 
 		inmate := &j.Offenders[i]
-		err := inmate.Update(j)
+		/*err := inmate.Update(j)
 		if err != nil {
 			log.Printf("failed to update inmate \"%s\": %v", inmate.ArrestNo, err)
 			continue
-		}
-		log.Printf("Updated inmate \"%s\". Cases: %d Charges: %d Holds: %d Booked: %s",
-			inmate.ArrestNo, len(inmate.Cases), len(inmate.Charges), len(inmate.Holds), inmate.OriginalBookDateTime,
+		}*/
+		log.Printf("Updated inmate \"%s\": %s, %s Charges: %s Court Type: %s Court Date: %s Booked: %s",
+			inmate.ArrestNo, inmate.SpecialLastName, inmate.SpecialFirstName, inmate.Charges[0].ChargeDescription, inmate.Charges[0].CourtType, inmate.Charges[0].CourtTime, inmate.OriginalBookDateTime,
 		)
 	}
 	return nil
@@ -124,7 +219,7 @@ func (j *Jail) UpdateInmates() error {
 // Get the URL for the jail's main page, as it would be accessed by a web browser.
 // Jails have their own URL within the domain, but the captcha service needs to know which jail
 // the captcha corresponds to, so it looks for this URL in the Referer header.
-func (j Jail) getJailURL() string {
+func (j Jail2) getJailURL() string {
 	return fmt.Sprintf("%s/jtclientweb/jailtracker/index/%s", j.BaseURL, j.Name)
 }
 
@@ -133,14 +228,14 @@ func (j Jail) getJailAPIURL() string {
 	return fmt.Sprintf("%s/jtclientweb/Offender/%s", j.BaseURL, j.Name)
 }
 
-func CrawlJail(baseURL, name string) (*Jail, error) {
+func CrawlJail(baseURL, name string) (*Jail2, error) {
 	j, err := NewJail(baseURL, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize jail: %w", err)
 	}
 	log.Printf("Found %d inmates", len(j.Offenders))
 
-	err = j.UpdateInmates()
+	// err = j.UpdateInmates()
 	if err != nil {
 		return nil, fmt.Errorf("failed to update inmates: %w", err)
 	}

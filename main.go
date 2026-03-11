@@ -45,8 +45,8 @@ func main() {
 
 // LoadJailCached will load the jail data from cache if present, or crawl the jail and save it to the configured
 // cache directory if not.
-func LoadJailCached(jailConfig *JailConfig) (*Jail, error) {
-	var jail *Jail
+func LoadJailCached(jailConfig *JailConfig) (*Jail2, error) {
+	var jail *Jail2
 	filename := JailCachePath(jailConfig.Slug)
 	file, err := os.OpenFile(filename, os.O_RDWR|os.O_EXCL, 0644)
 	if errors.Is(err, os.ErrNotExist) { // File doesn't exist; create it
@@ -77,7 +77,7 @@ func LoadJailCached(jailConfig *JailConfig) (*Jail, error) {
 }
 
 // SaveJail saves the jail data to the configured cache directory.
-func SaveJail(jail *Jail) error {
+func SaveJail(jail *Jail2) error {
 	data, err := json.MarshalIndent(jail, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal jail data: %w", err)

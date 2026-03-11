@@ -32,7 +32,7 @@ type CaptchaAttemptResults struct {
 }
 
 // ProcessCaptcha retrieves and solves the captcha for the given jail, returning the captchaKey.
-func ProcessCaptcha(jail *Jail) (string, error) {
+func ProcessCaptcha(jail *Jail2) (string, error) {
 	// Referer should be the jail's URL; used for redirection in web client.
 	// May not affect us, but matches "normal" traffic.
 	headers := map[string][]string{

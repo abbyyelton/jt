@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 const DefaultJailBaseURL = "https://omsweb.public-safety-cloud.com"
@@ -72,6 +74,7 @@ type AppEnv struct {
 
 // Load sets default values for empty optional environment variables
 func (a *AppEnv) Load() {
+	godotenv.Load()
 	a.OpenAIAPIKey = os.Getenv("JTT_OPENAI_API_KEY")
 
 	a.ConfigPath = os.Getenv("JTT_CONFIG_PATH")

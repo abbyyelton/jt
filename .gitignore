@@ -9,3 +9,5 @@ results.json
 .env
 
 cache
+
+node_modules
